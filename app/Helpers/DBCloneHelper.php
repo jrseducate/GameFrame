@@ -56,53 +56,50 @@ class DBCloneHelper
                                 return "'$key' => '$value'";
                             }, $record, array_keys($record))) . "\r\n$tabs[4]" . ']';
                     }, $records)) . "\r\n$tabs[3]" . ']';
+
+                $columns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME')->all();
+
+                if(!empty($columns))
+                {
+                    $columns  = "['" . implode("','", $columns) . "']";
+                }
+                else
+                {
+                    $columns = '[]';
+                }
+
+                $nullableColumns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES';"))->pluck('COLUMN_NAME')->all();
+
+                if(!empty($nullableColumns))
+                {
+                    $nullableColumns  = "['" . implode("','", $nullableColumns) . "']";
+                }
+                else
+                {
+                    $nullableColumns = '[]';
+                }
+
+                $template = Storage::get('templates' . DIRECTORY_SEPARATOR . 'dbclone.php');
+
+                $fileName = $className = "Clone" . str_replace(' ', '', ucwords(str_replace('_', ' ', $table)));
+                $fileName .= '.php';
+
+                $namespace = "App\\Clones\\$database";
+
+                $template = str_replace('__NameSpace__', $namespace, $template);
+                $template = str_replace('__ClassName__', $className, $template);
+                $template = str_replace('__Connection__', "'$connection'", $template);
+                $template = str_replace('__Database__', "'$database'", $template);
+                $template = str_replace('__TableName__', "'$table'", $template);
+                $template = str_replace('__Records__', $records, $template);
+                $template = str_replace('__Columns__', $columns, $template);
+                $template = str_replace('__NullableColumns__', $nullableColumns, $template);
+
+                Storage::disk('app')->put("Clones/$database/$fileName", $template);
+
+                $classNames[] = $namespace . '\\' . $className;
             }
-            else
-            {
-                $records = "[]";
-            }
 
-            $columns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME')->all();
-
-            if(!empty($columns))
-            {
-                $columns  = "['" . implode("','", $columns) . "']";
-            }
-            else
-            {
-                $columns = '[]';
-            }
-
-            $nullableColumns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES';"))->pluck('COLUMN_NAME')->all();
-
-            if(!empty($nullableColumns))
-            {
-                $nullableColumns  = "['" . implode("','", $nullableColumns) . "']";
-            }
-            else
-            {
-                $nullableColumns = '[]';
-            }
-
-            $template = Storage::get('templates' . DIRECTORY_SEPARATOR . 'dbclone.php');
-
-            $fileName = $className = "Clone" . str_replace(' ', '', ucwords(str_replace('_', ' ', $table)));
-            $fileName .= '.php';
-
-            $namespace = "App\\Clones\\$database";
-
-            $template = str_replace('__NameSpace__', $namespace, $template);
-            $template = str_replace('__ClassName__', $className, $template);
-            $template = str_replace('__Connection__', "'$connection'", $template);
-            $template = str_replace('__Database__', "'$database'", $template);
-            $template = str_replace('__TableName__', "'$table'", $template);
-            $template = str_replace('__Records__', $records, $template);
-            $template = str_replace('__Columns__', $columns, $template);
-            $template = str_replace('__NullableColumns__', $nullableColumns, $template);
-
-            Storage::disk('app')->put("Clones/$database/$fileName", $template);
-
-            $classNames[] = $namespace . '\\' . $className;
             $progressBar->advance(1);
         }
         $progressBar->finish();
