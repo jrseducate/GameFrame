@@ -16,19 +16,6 @@ use Illuminate\Support\Facades\Artisan;
 
 $defaultConnection  = Cache::get('dbo_default_connection', \DB::getName());
 
-function getDatabaseFromConnection($connection, $default = null)
-{
-    try
-    {
-        return \DB::connection($connection)->getDatabaseName();
-    }
-    catch(\Exception $ex)
-    {
-        return $default;
-    }
-
-}
-
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->describe('Display an inspiring quote');

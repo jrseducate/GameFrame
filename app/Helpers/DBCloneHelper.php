@@ -30,11 +30,19 @@ class DBCloneHelper
         ];
 
         $tables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database';"))->pluck('TABLE_NAME')->all();
+        $excludedTables = config("dbclone.excluded-tables.$connection");
+        if(!empty($excludedTables))
+        {
+            $tables = array_filter($tables, function($table) use(&$excludedTables)
+            {
+                return collect($excludedTables)->search($table) === false;
+            });
+        }
+
         $progressBar = new ProgressBar($command->getOutput(), count($tables));
         $progressBar->setFormat(self::$progressBarFormat);
         foreach($tables as $table)
         {
-            sleep(1);
             $progressBar->setMessage("Committing `$table`");
             $progressBar->display();
             $records     = DB::select("SELECT * FROM `$database`.`$table`");
@@ -55,7 +63,26 @@ class DBCloneHelper
             }
 
             $columns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME')->all();
-            $columns  = "['" . implode("','", $columns) . "']";
+
+            if(!empty($columns))
+            {
+                $columns  = "['" . implode("','", $columns) . "']";
+            }
+            else
+            {
+                $columns = '[]';
+            }
+
+            $nullableColumns  = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES';"))->pluck('COLUMN_NAME')->all();
+
+            if(!empty($nullableColumns))
+            {
+                $nullableColumns  = "['" . implode("','", $nullableColumns) . "']";
+            }
+            else
+            {
+                $nullableColumns = '[]';
+            }
 
             $template = Storage::get('templates' . DIRECTORY_SEPARATOR . 'dbclone.php');
 
@@ -71,6 +98,7 @@ class DBCloneHelper
             $template = str_replace('__TableName__', "'$table'", $template);
             $template = str_replace('__Records__', $records, $template);
             $template = str_replace('__Columns__', $columns, $template);
+            $template = str_replace('__NullableColumns__', $nullableColumns, $template);
 
             Storage::disk('app')->put("Clones/$database/$fileName", $template);
 
@@ -94,7 +122,6 @@ class DBCloneHelper
 
         foreach($clones as $clone)
         {
-            sleep(1);
             $clone = new $clone();
             $progressBar->setMessage("Insert or Update `{$clone::$tableName}`");
             $progressBar->display();
