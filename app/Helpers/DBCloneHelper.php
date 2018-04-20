@@ -1,7 +1,9 @@
 <?php
 
+use Illuminate\Foundation\Console\ClosureCommand;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Console\Helper\ProgressBar;
 
 /**
  * Created by PhpStorm.
@@ -12,8 +14,11 @@ use Illuminate\Support\Facades\Storage;
 
 class DBCloneHelper
 {
-    public static function commit()
+    public static $progressBarFormat = ' %current%/%max% [%bar%] %message% %percent:3s%% %elapsed:6s%/%estimated:-6s% %memory:6s%';
+
+    public static function commit(ClosureCommand $command, $connection)
     {
+        $database = \DB::connection($connection)->getDatabaseName();
         $classNames = [];
 
         $tabs = [
@@ -24,10 +29,14 @@ class DBCloneHelper
             5 => str_repeat(' ', 20),
         ];
 
-        $database = 'gamedev';
         $tables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database';"))->pluck('TABLE_NAME')->all();
+        $progressBar = new ProgressBar($command->getOutput(), count($tables));
+        $progressBar->setFormat(self::$progressBarFormat);
         foreach($tables as $table)
         {
+            sleep(1);
+            $progressBar->setMessage("Committing `$table`");
+            $progressBar->display();
             $records     = DB::select("SELECT * FROM `$database`.`$table`");
             if(!empty($records))
             {
@@ -53,33 +62,45 @@ class DBCloneHelper
             $fileName = $className = "Clone" . str_replace(' ', '', ucwords(str_replace('_', ' ', $table)));
             $fileName .= '.php';
 
-            $namespace = 'App\\Clones';
+            $namespace = "App\\Clones\\$database";
 
             $template = str_replace('__NameSpace__', $namespace, $template);
             $template = str_replace('__ClassName__', $className, $template);
+            $template = str_replace('__Connection__', "'$connection'", $template);
             $template = str_replace('__Database__', "'$database'", $template);
             $template = str_replace('__TableName__', "'$table'", $template);
             $template = str_replace('__Records__', $records, $template);
             $template = str_replace('__Columns__', $columns, $template);
 
-            Storage::disk('app')->put("Clones/$fileName", $template);
+            Storage::disk('app')->put("Clones/$database/$fileName", $template);
 
             $classNames[] = $namespace . '\\' . $className;
+            $progressBar->advance(1);
         }
+        $progressBar->finish();
 
         $classNames = json_encode($classNames);
 
-        Storage::put("CloneClasses.php", "$classNames");
+        Storage::put("$database/CloneClasses.php", "$classNames");
     }
 
-    public static function update()
+    public static function update(ClosureCommand $command, $connection)
     {
-        $clones = json_decode(Storage::get("CloneClasses.php"));
+        $database = \DB::connection($connection)->getDatabaseName();
+        $clones = json_decode(Storage::get("$database/CloneClasses.php"));
+
+        $progressBar = new ProgressBar($command->getOutput(), count($clones));
+        $progressBar->setFormat(self::$progressBarFormat);
 
         foreach($clones as $clone)
         {
+            sleep(1);
             $clone = new $clone();
+            $progressBar->setMessage("Insert or Update `{$clone::$tableName}`");
+            $progressBar->display();
             $clone->exec();
+            $progressBar->advance(1);
         }
+        $progressBar->finish();
     }
 }

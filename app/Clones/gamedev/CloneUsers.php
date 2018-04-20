@@ -1,5 +1,5 @@
 <?php
-namespace App\Clones;
+namespace App\Clones\gamedev;
 
 use Illuminate\Support\Facades\DB;
 
@@ -12,11 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 class CloneUsers
 {
+    public static $tableName = 'users';
+
     public function exec()
     {
         $chunkSize      = 50;
+        $connection     = 'gamedev';
         $database       = 'gamedev';
-        $tableName      = 'users';
+        $tableName      = self::$tableName;
         $records        = [
                 [
                     'id' => '1',
@@ -54,7 +57,7 @@ class CloneUsers
 
             $insertQuery = "INSERT INTO `$database`.`$tableName` ($columnList) VALUES ('$values') ON DUPLICATE KEY UPDATE $updateDuplicates";
 
-            DB::statement($insertQuery);
+            DB::connection($connection)->statement($insertQuery);
         }
     }
 }
