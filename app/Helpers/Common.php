@@ -81,8 +81,11 @@ if(!function_exists('toString'))
                     if(!is_numeric($value))
                     {
 //                        preg_replace("/^(?<!\\)'$/", "\\'", $value);
-                        $value = str_replace("\\'", "'", $value);
-                        $value = str_replace("'", "\\'", $value);
+//                        for($i = 0; $i < 4; $i++)
+//                        {
+//                            $value = str_replace("\\'", "'", $value);
+//                        }
+//                        $value = str_replace("'", "\\'", $value);
                         $value = "'$value'";
                     }
                     $result .= "$key => $value";

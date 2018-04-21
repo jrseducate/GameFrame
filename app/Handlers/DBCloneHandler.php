@@ -117,7 +117,18 @@ class DBCloneHandler
 
         foreach($clones as $clone)
         {
-            $clone = require "App\\CloneClasses\\$database\\$clone";
+            try
+            {
+                $clone = require "App\\CloneClasses\\$database\\$clone";
+            }
+            catch(\Exception $exception)
+            {
+                Log::warning($exception->getMessage());
+                Log::warning($exception->getTraceAsString());
+                dump('Error in ' . __FILE__ . '::exec()');
+                dump($exception->getMessage());
+                continue;
+            }
             $progressBar->setMessage("Insert or Update `{$clone['table']}`");
             self::exec($clone);
             usleep(self::getDelay());
