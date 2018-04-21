@@ -39,13 +39,15 @@ class DBCloneHandler
         {
             $progressBar->setMessage("Committing `$table`");
             $progressBar->display();
+
             $records = DB::select("SELECT * FROM `$database`.`$table`");
+
             if(!empty($records))
             {
                 $columns            = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME')->all();
                 $nullableColumns    = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES';"))->pluck('COLUMN_NAME')->all();
 
-                $dbClone[] = [
+                $dbClone = [
                     'connection' => $connection,
                     'database'   => $database,
                     'table'      => $table,
@@ -53,33 +55,44 @@ class DBCloneHandler
                     'columns'    => $columns,
                     'records'    => $records,
                 ];
+                $dbClone = toString($dbClone);
+
+                Storage::disk('app')->put("CloneClasses/$database/$table.php", "<?php return $dbClone;");
             }
 
             $progressBar->advance(1);
         }
         $progressBar->finish();
 
-        $dbClone = toString($dbClone);
-
-        Storage::disk('app')->put("CloneClasses/$database.php", "<?php return $dbClone;");
+//        Storage::disk('app')->put("CloneClasses/$database.php", "<?php return $dbClone;");
     }
 
     public static function update(ClosureCommand $command, $connection)
     {
         $database = \DB::connection($connection)->getDatabaseName();
-        $clones = require "App\\CloneClasses\\$database.php";
+        $clones = Storage::disk('app')->files("CloneClasses/$database");
 
-        $progressBar = new ProgressBar($command->getOutput(), count($clones));
-        $progressBar->setFormat(self::$progressBarFormat);
-
-        foreach($clones as $clone)
+        if(!empty($clones))
         {
-            $progressBar->setMessage("Insert or Update `{$clone['table']}`");
-            $progressBar->display();
-            self::exec($clone);
-            $progressBar->advance(1);
+            $progressBar = new ProgressBar($command->getOutput(), count($clones));
+            $progressBar->setFormat(self::$progressBarFormat);
+
+            foreach($clones as $clone)
+            {
+                $clone = array_last(preg_split('~[\\\\/]~', $clone));
+                $clone = require "App\\CloneClasses\\$database\\$clone";
+                $progressBar->setMessage("Insert or Update `{$clone['table']}`");
+                $progressBar->display();
+                self::exec($clone);
+                $progressBar->advance(1);
+            }
+
+            $progressBar->finish();
         }
-        $progressBar->finish();
+        else
+        {
+            $command->warn('No CloneClasses found in ' . "'app/CloneClasses/$database'");
+        }
     }
 
     public static function exec($dbClone)
