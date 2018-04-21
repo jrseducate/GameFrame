@@ -21,6 +21,18 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->describe('Display an inspiring quote');
 
+Artisan::command("dbc:clear {connection=0}", function($connection) use($defaultConnection)
+{
+    $connection = ($connection == '0') ? $defaultConnection : $connection;
+
+    if(is_null(getDatabaseFromConnection($connection)))
+    {
+        $this->warn("Failed to find connection '$connection'");
+        return;
+    }
+
+    DBCloneHandler::clear($this, $connection);
+});
 Artisan::command("dbc:default {connection}", function($connection) use($defaultConnection)
 {
     if(is_null(getDatabaseFromConnection($connection)))
@@ -34,6 +46,7 @@ Artisan::command("dbc:default {connection}", function($connection) use($defaultC
 Artisan::command("dbc:commit {connection=0}", function($connection) use($defaultConnection)
 {
     $connection = ($connection == '0') ? $defaultConnection : $connection;
+
     if(is_null(getDatabaseFromConnection($connection)))
     {
         $this->warn("Failed to find connection '$connection'");
@@ -45,6 +58,7 @@ Artisan::command("dbc:commit {connection=0}", function($connection) use($default
 Artisan::command("dbc:update {connection=0}", function($connection) use($defaultConnection)
 {
     $connection = ($connection == '0') ? $defaultConnection : $connection;
+
     if(is_null(getDatabaseFromConnection($connection)))
     {
         $this->warn("Failed to find connection '$connection'");

@@ -10,12 +10,15 @@ return [
 
     'excluded-tables' =>
     [
+        'gamedev' => [
+            'users'
+        ],
         'mysql' => [
-            'proc',
+//            'proc',
             'help_topic',
-            'proxies_priv',
-            'tables_priv',
-            'user',
+//            'proxies_priv',
+//            'tables_priv',
+//            'user',
         ]
     ]
 ];

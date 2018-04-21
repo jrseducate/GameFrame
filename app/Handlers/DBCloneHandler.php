@@ -29,17 +29,32 @@ class DBCloneHandler
     {
         $database = DB::connection($connection)->getDatabaseName();
 
+        $emptyTables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database' AND t.`table_rows` IS NULL OR t.`table_rows` <= 0;"))->pluck('TABLE_NAME')->all();
         $tables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database' AND t.`table_rows` IS NOT NULL AND t.`table_rows` > 0;"))->pluck('TABLE_NAME')->all();
         $excludedTables = config("dbclone.excluded-tables.$connection");
+
+        if(!empty($emptyTables))
+        {
+            $command->info("Empty tables: " . implode(', ', $emptyTables));
+        }
+
         if(!empty($excludedTables))
         {
+            $command->info("Excluded tables: " . implode(', ', $excludedTables));
+
             $tables = array_filter($tables, function($table) use(&$excludedTables)
             {
                 return collect($excludedTables)->search($table) === false;
             });
         }
 
-        $command->info("Tables found: " . implode(', ', $tables));
+        if(empty($tables))
+        {
+            $command->warn("No tables to commit in database '$database'");
+            return;
+        }
+
+        $command->info("Tables to commit: " . implode(', ', $tables));
         if(!$command->confirm("Run dbo:commit on connection '$connection'?"))
         {
             return;
@@ -85,32 +100,58 @@ class DBCloneHandler
             return array_last(preg_split('~[\\\\/]~', $clone));
         }, Storage::disk('app')->files("CloneClasses/$database"));
 
+        if(empty($clones))
+        {
+            $command->warn('No CloneClasses found in ' . "'app/CloneClasses/$database'");
+            return;
+        }
+
         $command->info("CloneClasses found: " . implode(', ', $clones));
         if(!$command->confirm("Run dbo:update on connection '$connection'?"))
         {
             return;
         }
 
-        if(!empty($clones))
-        {
-            $progressBar = new ProgressBar($command->getOutput(), count($clones));
-            $progressBar->setFormat(self::$progressBarFormat);
+        $progressBar = new ProgressBar($command->getOutput(), count($clones));
+        $progressBar->setFormat(self::$progressBarFormat);
 
-            foreach($clones as $clone)
-            {
-                $clone = require "App\\CloneClasses\\$database\\$clone";
-                $progressBar->setMessage("Insert or Update `{$clone['table']}`");
-                self::exec($clone);
-                usleep(self::getDelay());
-                $progressBar->advance(1);
-            }
-
-            $progressBar->finish();
-        }
-        else
+        foreach($clones as $clone)
         {
-            $command->warn('No CloneClasses found in ' . "'app/CloneClasses/$database'");
+            $clone = require "App\\CloneClasses\\$database\\$clone";
+            $progressBar->setMessage("Insert or Update `{$clone['table']}`");
+            self::exec($clone);
+            usleep(self::getDelay());
+            $progressBar->advance(1);
         }
+
+        $progressBar->finish();
+    }
+
+    public static function clear(ClosureCommand $command, $connection)
+    {
+        $database = DB::connection($connection)->getDatabaseName();
+        $files = Storage::disk('app')->files("CloneClasses/$database");
+
+        if(empty($files))
+        {
+            $command->warn("No files found in 'app/CloneClasses/$database'");
+            return;
+        }
+
+        $clones = array_map(function($clone)
+        {
+            return array_last(preg_split('~[\\\\/]~', $clone));
+        }, $files);
+
+        $command->warn("CloneClasses pending delete: " . implode(', ', $clones));
+        if(!$command->confirm("Run dbo:clear on connection '$connection'?"))
+        {
+            return;
+        }
+
+        Storage::disk('app')->delete($files);
+
+        $command->info("CloneClasses cleared in connection '$connection'");
     }
 
     public static function exec($dbClone)
