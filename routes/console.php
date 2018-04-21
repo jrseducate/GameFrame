@@ -1,5 +1,6 @@
 <?php
 
+use App\Handlers\DBCloneHandler;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 
@@ -41,7 +42,7 @@ Artisan::command("dbc:commit {connection=0}", function($connection) use($default
 
     if($this->confirm("Run dbo:commit on connection '$connection'?"))
     {
-        DBCloneHelper::commit($this, $connection);
+        DBCloneHandler::commit($this, $connection);
     }
 });
 Artisan::command("dbc:update {connection=0}", function($connection) use($defaultConnection)
@@ -55,6 +56,6 @@ Artisan::command("dbc:update {connection=0}", function($connection) use($default
 
     if($this->confirm("Run dbo:commit on connection '$connection'?"))
     {
-        DBCloneHelper::update($this, $connection);
+        DBCloneHandler::update($this, $connection);
     }
 });

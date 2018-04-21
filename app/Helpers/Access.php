@@ -19,17 +19,4 @@ if(!function_exists('user'))
         $user = Illuminate\Support\Facades\Auth::user();
         return $user;
     }
-
-    function getDatabaseFromConnection($connection, $default = null)
-    {
-        try
-        {
-            return \DB::connection($connection)->getDatabaseName();
-        }
-        catch(\Exception $ex)
-        {
-            return $default;
-        }
-
-    }
 }
