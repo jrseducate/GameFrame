@@ -4,6 +4,7 @@ namespace App\Handlers;
 
 use Illuminate\Foundation\Console\ClosureCommand;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Helper\ProgressBar;
 
@@ -16,14 +17,19 @@ use Symfony\Component\Console\Helper\ProgressBar;
 
 class DBCloneHandler
 {
+    public static $delay = null;
     public static $progressBarFormat = ' %current%/%max% [%bar%] %message% %percent:3s%% %elapsed:6s%/%estimated:-6s% %memory:6s%';
+
+    public static function getDelay()
+    {
+        return self::$delay = self::$delay ?: secondsToMicroSeconds(0.125);
+    }
 
     public static function commit(ClosureCommand $command, $connection)
     {
-        $database = \DB::connection($connection)->getDatabaseName();
-        $dbClone = [];
+        $database = DB::connection($connection)->getDatabaseName();
 
-        $tables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database';"))->pluck('TABLE_NAME')->all();
+        $tables = collect(DB::select("SELECT `TABLE_NAME` FROM `information_schema`.`tables` t WHERE t.`table_schema` = '$database' AND t.`table_rows` IS NOT NULL AND t.`table_rows` > 0;"))->pluck('TABLE_NAME')->all();
         $excludedTables = config("dbclone.excluded-tables.$connection");
         if(!empty($excludedTables))
         {
@@ -33,12 +39,17 @@ class DBCloneHandler
             });
         }
 
+        $command->info("Tables found: " . implode(', ', $tables));
+        if(!$command->confirm("Run dbo:commit on connection '$connection'?"))
+        {
+            return;
+        }
+
         $progressBar = new ProgressBar($command->getOutput(), count($tables));
         $progressBar->setFormat(self::$progressBarFormat);
         foreach($tables as $table)
         {
             $progressBar->setMessage("Committing `$table`");
-            $progressBar->display();
 
             $records = DB::select("SELECT * FROM `$database`.`$table`");
 
@@ -60,17 +71,25 @@ class DBCloneHandler
                 Storage::disk('app')->put("CloneClasses/$database/$table.php", "<?php return $dbClone;");
             }
 
+            usleep(self::getDelay());
             $progressBar->advance(1);
         }
         $progressBar->finish();
-
-//        Storage::disk('app')->put("CloneClasses/$database.php", "<?php return $dbClone;");
     }
 
     public static function update(ClosureCommand $command, $connection)
     {
-        $database = \DB::connection($connection)->getDatabaseName();
-        $clones = Storage::disk('app')->files("CloneClasses/$database");
+        $database = DB::connection($connection)->getDatabaseName();
+        $clones = array_map(function($clone)
+        {
+            return array_last(preg_split('~[\\\\/]~', $clone));
+        }, Storage::disk('app')->files("CloneClasses/$database"));
+
+        $command->info("CloneClasses found: " . implode(', ', $clones));
+        if(!$command->confirm("Run dbo:update on connection '$connection'?"))
+        {
+            return;
+        }
 
         if(!empty($clones))
         {
@@ -79,11 +98,10 @@ class DBCloneHandler
 
             foreach($clones as $clone)
             {
-                $clone = array_last(preg_split('~[\\\\/]~', $clone));
                 $clone = require "App\\CloneClasses\\$database\\$clone";
                 $progressBar->setMessage("Insert or Update `{$clone['table']}`");
-                $progressBar->display();
                 self::exec($clone);
+                usleep(self::getDelay());
                 $progressBar->advance(1);
             }
 
@@ -138,8 +156,8 @@ class DBCloneHandler
             }
             catch(\Exception $exception)
             {
-                \Log::warning($exception->getMessage());
-                \Log::warning($exception->getTraceAsString());
+                Log::warning($exception->getMessage());
+                Log::warning($exception->getTraceAsString());
                 dump('Error in ' . __FILE__ . '::exec()');
                 dump($exception->getMessage());
             }

@@ -40,10 +40,7 @@ Artisan::command("dbc:commit {connection=0}", function($connection) use($default
         return;
     }
 
-    if($this->confirm("Run dbo:commit on connection '$connection'?"))
-    {
-        DBCloneHandler::commit($this, $connection);
-    }
+    DBCloneHandler::commit($this, $connection);
 });
 Artisan::command("dbc:update {connection=0}", function($connection) use($defaultConnection)
 {
@@ -54,8 +51,5 @@ Artisan::command("dbc:update {connection=0}", function($connection) use($default
         return;
     }
 
-    if($this->confirm("Run dbo:commit on connection '$connection'?"))
-    {
-        DBCloneHandler::update($this, $connection);
-    }
+    DBCloneHandler::update($this, $connection);
 });

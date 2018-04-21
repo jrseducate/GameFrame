@@ -6,6 +6,44 @@
  * Time: 8:23 PM
  */
 
+
+
+if(!function_exists('secondsToMicroSeconds'))
+{
+    /**
+     * Seconds To Micro Seconds
+     *
+     * @param float|string $seconds
+     * @return int
+     */
+    function secondsToMicroSeconds($seconds)
+    {
+        return intval(floatval($seconds) * 1000000);
+    }
+}
+
+if(!function_exists('secondsToMicroSeconds'))
+{
+    /**
+     * Get First Set
+     *
+     * @param mixed $values
+     * @return mixed|null
+     */
+    function getFirstSet(...$values)
+    {
+        foreach($values as $value)
+        {
+            if(isset($value))
+            {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+}
+
 if(!function_exists('toString'))
 {
     /**
