@@ -200,6 +200,9 @@ class DBCloneHandler
 
         $recordChunks   = array_chunk($records, $chunkSize, true);
 
+        DB::connection($connection)->statement("SET FOREIGN_KEY_CHECKS=0;");
+        DB::connection($connection)->statement("SET @@SESSION.sql_mode='ALLOW_INVALID_DATES';");
+
         foreach($recordChunks as $key => $recordChunk)
         {
             try
@@ -219,10 +222,14 @@ class DBCloneHandler
             }
             catch(QueryException $exception)
             {
+                $key = $key * $chunkSize;
+                $keyStop = $key + count($recordChunk) - 1;
+                $keyRange = "$key -> $keyStop";
                 $exceptionClass = array_last(preg_split('~[\\\\/]~', get_class($exception)));
                 $exceptionMessage = toString($exception->errorInfo);
-                $command->warn("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$key], $exceptionClass => $exceptionMessage");
-                Log::warning("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$key], $exceptionClass => $exceptionMessage");
+
+                $command->warn("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$keyRange], $exceptionClass => $exceptionMessage");
+                Log::warning("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$keyRange], $exceptionClass => $exceptionMessage");
             }
         }
     }
