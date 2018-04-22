@@ -67,23 +67,49 @@ class DBCloneHandler
         {
             $progressBar->setMessage("Committing `$table`");
 
-            $records = DB::select("SELECT * FROM `$database`.`$table`");
+            $columns            = collect(DB::select("SELECT c.`COLUMN_NAME`, c.`ordinal_position` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME', 'ordinal_position')->all();
+            $nullableColumns    = collect(DB::select("SELECT c.`COLUMN_NAME`, c.`ordinal_position` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME', 'ordinal_position')->all();
+            $blobColumns        = collect(DB::select("SELECT c.`COLUMN_NAME`, c.`ordinal_position` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`data_type` IN ('smallblob', 'blob', 'mediumblob', 'longblob') ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME', 'ordinal_position')->all();
+
+            $columnSelect = '';
+
+            foreach($columns as $column)
+            {
+                if(!empty($columnSelect))
+                {
+                    $columnSelect .= ', ';
+                }
+
+                if(array_search($column, $blobColumns))
+                {
+                    $columnSelect .= "HEX(`$column`) AS $column";
+                    continue;
+                }
+
+                $columnSelect .= "`$column`";
+            }
+
+            $records = DB::select("SELECT $columnSelect FROM `$database`.`$table`");
 
             if(!empty($records))
             {
-                $columns            = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' ORDER BY c.`ordinal_position`;"))->pluck('COLUMN_NAME')->all();
-                $nullableColumns    = collect(DB::select("SELECT `COLUMN_NAME` FROM `information_schema`.`columns` c WHERE c.`table_schema` = '$database' AND c.`table_name` = '$table' AND c.`IS_NULLABLE` = 'YES';"))->pluck('COLUMN_NAME')->all();
-
                 $dbClone = [
                     'connection' => $connection,
                     'database'   => $database,
                     'table'      => $table,
                     'nullable'   => $nullableColumns,
+                    'blob'       => $blobColumns,
                     'columns'    => $columns,
                     'records'    => $records,
                 ];
-                $dbClone = toString($dbClone, function($value)
+
+                $dbClone = toString($dbClone, function($value, $key) use(&$blobColumns)
                 {
+//                    if(array_search($key, $blobColumns) !== false)
+//                    {
+//                        return '0x' . bin2hex($value);
+//                    }
+
                     if(!is_numeric($value) && is_string($value))
                     {
                         $value = str_replace("\\", "\\\\\\\\", $value);
@@ -185,6 +211,7 @@ class DBCloneHandler
         $records        = $dbClone['records'];
         $columns        = $dbClone['columns'];
         $nullable       = collect($dbClone['nullable']);
+        $blob           = collect($dbClone['blob']);
 
         $columnList         = '`' . implode('`,`', $columns) . '`';
         $updateDuplicates   = '';
@@ -207,10 +234,14 @@ class DBCloneHandler
         {
             try
             {
-                $values = implode("),(", array_map(function($record) use(&$nullable)
+                $values = implode("),(", array_map(function($record) use(&$nullable, &$blob)
                 {
-                    $record = collect($record)->map(function($value, $column) use(&$nullable)
+                    $record = collect($record)->map(function($value, $column) use(&$nullable, &$blob)
                     {
+                        if($blob->search($column) !== false)
+                        {
+                            return !empty($value) ? "UNHEX('$value')" : ($nullable->search($column) !== false ? 'NULL' : "0");
+                        }
                         return !empty($value) ? "'$value'" : ($nullable->search($column) !== false ? 'NULL' : "0");
                     })->all();
                     return implode(",", $record);
@@ -229,7 +260,7 @@ class DBCloneHandler
                 $exceptionMessage = toString($exception->errorInfo);
 
                 $command->warn("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$keyRange], $exceptionClass => $exceptionMessage");
-                Log::warning("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$keyRange], $exceptionClass => $exceptionMessage");
+                Log::warning($exception->getMessage());
             }
         }
     }

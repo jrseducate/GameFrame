@@ -71,15 +71,15 @@ if(!function_exists('toString'))
                     $result .= ', ';
                 }
 
-                $key = is_numeric($key) ? $key : "'$key'";
-
                 if(is_array($value) || is_object($value))
                 {
+                    $key = is_numeric($key) ? $key : "'$key'";
                     $result .= "$key => " . toString($value, $callback);
                 }
                 else
                 {
-                    $value = isset($callback) ? $callback($value) : $value;
+                    $value = isset($callback) ? $callback($value, $key) : $value;
+                    $key = is_numeric($key) ? $key : "'$key'";
                     if(!is_numeric($value))
                     {
 //                        preg_replace("/^(?<!\\)'$/", "\\'", $value);
