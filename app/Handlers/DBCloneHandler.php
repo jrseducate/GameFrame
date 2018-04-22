@@ -2,6 +2,7 @@
 
 namespace App\Handlers;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Console\ClosureCommand;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -81,7 +82,17 @@ class DBCloneHandler
                     'columns'    => $columns,
                     'records'    => $records,
                 ];
-                $dbClone = toString($dbClone);
+                $dbClone = toString($dbClone, function($value)
+                {
+                    if(!is_numeric($value) && is_string($value))
+                    {
+                        $value = str_replace("\\", "\\\\\\\\", $value);
+                        $value = str_replace("''", "'", $value);
+                        $value = str_replace("'", "\\'\\'", $value);
+                    }
+
+                    return $value;
+                });
 
                 Storage::disk('app')->put("CloneClasses/$database/$table.php", "<?php return $dbClone;");
             }
@@ -130,7 +141,7 @@ class DBCloneHandler
                 continue;
             }
             $progressBar->setMessage("Insert or Update `{$clone['table']}`");
-            self::exec($clone);
+            self::exec($command, $clone);
             usleep(self::getDelay());
             $progressBar->advance(1);
         }
@@ -165,7 +176,7 @@ class DBCloneHandler
         $command->info("CloneClasses cleared in connection '$connection'");
     }
 
-    public static function exec($dbClone)
+    public static function exec(ClosureCommand $command, $dbClone)
     {
         $chunkSize      = 50;
         $connection     = $dbClone['connection'];
@@ -187,9 +198,9 @@ class DBCloneHandler
             $updateDuplicates .= "`$column` = VALUES(`$column`)";
         }
 
-        $recordChunks   = array_chunk($records, $chunkSize);
+        $recordChunks   = array_chunk($records, $chunkSize, true);
 
-        foreach($recordChunks as $recordChunk)
+        foreach($recordChunks as $key => $recordChunk)
         {
             try
             {
@@ -206,12 +217,12 @@ class DBCloneHandler
 
                 DB::connection($connection)->statement($insertQuery);
             }
-            catch(\Exception $exception)
+            catch(QueryException $exception)
             {
-                Log::warning($exception->getMessage());
-                Log::warning($exception->getTraceAsString());
-                dump('Error in ' . __FILE__ . '::exec()');
-                dump($exception->getMessage());
+                $exceptionClass = array_last(preg_split('~[\\\\/]~', get_class($exception)));
+                $exceptionMessage = toString($exception->errorInfo);
+                $command->warn("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$key], $exceptionClass => $exceptionMessage");
+                Log::warning("Failed to parse CloneClasses/$connection/$tableName.php:['records'][$key], $exceptionClass => $exceptionMessage");
             }
         }
     }

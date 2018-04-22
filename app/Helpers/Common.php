@@ -50,9 +50,10 @@ if(!function_exists('toString'))
      * To String
      *
      * @param array|object $array
+     * @param null|Closure $callback
      * @return string
      */
-    function toString($array)
+    function toString($array, $callback = null)
     {
         $result = '[';
 
@@ -74,10 +75,11 @@ if(!function_exists('toString'))
 
                 if(is_array($value) || is_object($value))
                 {
-                    $result .= "$key => " . toString($value);
+                    $result .= "$key => " . toString($value, $callback);
                 }
                 else
                 {
+                    $value = isset($callback) ? $callback($value) : $value;
                     if(!is_numeric($value))
                     {
 //                        preg_replace("/^(?<!\\)'$/", "\\'", $value);
